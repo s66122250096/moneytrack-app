@@ -18,10 +18,35 @@ export async function getCategories(userId) {
 
 export async function addCategory(userId, type, name) {
   const field = type === 'income' ? 'categoriesIncome' : 'categoriesExpense';
-  await updateDoc(doc(db, 'users', userId), { [field]: arrayUnion(name) });
+  const defaults = type === 'income' ? DEFAULT_INCOME : DEFAULT_EXPENSE;
+
+  // ดึงข้อมูลก่อนเพื่อเช็คว่า field มีอยู่แล้วหรือยัง
+  const snap = await getDoc(doc(db, 'users', userId));
+  const existing = snap.exists() ? snap.data()[field] : null;
+
+  if (existing && Array.isArray(existing)) {
+    // field มีอยู่แล้ว — ใช้ arrayUnion ได้เลย ไม่ทำให้ข้อมูลเดิมหาย
+    await updateDoc(doc(db, 'users', userId), { [field]: arrayUnion(name) });
+  } else {
+    // field ยังไม่มีใน Firestore — สร้างจาก default + รายการใหม่
+    const merged = [...defaults, name].filter((v, i, a) => a.indexOf(v) === i);
+    await updateDoc(doc(db, 'users', userId), { [field]: merged });
+  }
 }
 
 export async function removeCategory(userId, type, name) {
   const field = type === 'income' ? 'categoriesIncome' : 'categoriesExpense';
-  await updateDoc(doc(db, 'users', userId), { [field]: arrayRemove(name) });
+  const defaults = type === 'income' ? DEFAULT_INCOME : DEFAULT_EXPENSE;
+
+  // เช็คว่า field มีอยู่หรือยัง
+  const snap = await getDoc(doc(db, 'users', userId));
+  const existing = snap.exists() ? snap.data()[field] : null;
+
+  if (existing && Array.isArray(existing)) {
+    await updateDoc(doc(db, 'users', userId), { [field]: arrayRemove(name) });
+  } else {
+    // ลบออกจาก default แล้วบันทึก
+    const filtered = defaults.filter((c) => c !== name);
+    await updateDoc(doc(db, 'users', userId), { [field]: filtered });
+  }
 }
